@@ -133,6 +133,14 @@ static void freeproc(struct proc *p) {
     p->killed     = 0;
     p->parent     = NULL;
 
+    // free file descriptors
+    for (int i = 0; i < NPROCFILE; i++) {
+        if (p->fdtable[i]) {
+            fput(p->fdtable[i]);
+            p->fdtable[i] = NULL;
+        }
+    }
+
     if (p->mm) {
         assert(!holding(&p->mm->lock));
         acquire(&p->mm->lock);
