@@ -1,11 +1,11 @@
 #include "proc.h"
 
 #include "defs.h"
+#include "fs/fs.h"
 #include "kalloc.h"
 #include "loader.h"
 #include "queue.h"
 #include "trap.h"
-#include "fs/fs.h"
 
 struct proc *pool[NPROC];
 struct proc *init_proc = NULL;
@@ -68,7 +68,8 @@ static int allocpid() {
 
     return retpid;
 }
- static void first_sched_ret(void) {
+
+static void first_sched_ret(void) {
     release(&curr_proc()->lock);
     if (curr_proc() == init_proc) {
         intr_on();
@@ -106,6 +107,9 @@ found:
     // fork or exec(load_user_elf) will initialize these:
     p->mm      = NULL;
     p->vma_brk = NULL;
+
+    // fork will duplicate these:
+    memset(p->fdtable, 0, sizeof(p->fdtable));
 
     // prepare trapframe and the first return context.
     memset(&p->context, 0, sizeof(p->context));
@@ -212,6 +216,15 @@ int fork() {
 
     // copy saved user registers.
     *(np->trapframe) = *(p->trapframe);
+
+    // duplicate open file descriptors.
+    for (int i = 0; i < NPROCFILE; i++) {
+        if (p->fdtable[i]) {
+            // increase refcnt
+            fget(p->fdtable[i]);
+            np->fdtable[i] = p->fdtable[i];
+        }
+    }
 
     // Cause fork to return 0 in the child.
     np->trapframe->a0 = 0;

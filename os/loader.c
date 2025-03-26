@@ -3,6 +3,8 @@
 #include "defs.h"
 #include "elf.h"
 #include "trap.h"
+#include "fs/fs.h"
+#include "console.h"
 
 // Get user progs' infomation through pre-defined symbol in `link_app.S`
 void loader_init() {
@@ -217,6 +219,13 @@ int load_init_app() {
         panic("fail to load init elf.");
     }
     p->state          = RUNNABLE;
+
+    // setup fdtable: stdin and stdout
+    p->fdtable[0] = stdin;
+    fget(stdin);
+    p->fdtable[1] = stdout;
+    fget(stdout);
+
     add_task(p);
     init_proc = p;
     release(&p->lock);
