@@ -198,7 +198,6 @@ bad:
 }
 
 #define INIT_PROC "init"
-extern struct proc *init_proc;  // defined in proc.c
 
 // load all apps and init the corresponding `proc` structure.
 int load_init_app() {
