@@ -244,12 +244,12 @@ void virtio_disk_rw(struct buf *b, int write) {
     blkreq->reserved = 0;
     blkreq->sector   = sector;
 
-    disk.virtq.desc[idx[0]].addr  = KIVA_TO_PA(blkreq);
+    disk.virtq.desc[idx[0]].addr  = KIVA_TO_PA(blkreq); // disk.ops is allocated in kernel data, so use KIVA
     disk.virtq.desc[idx[0]].len   = sizeof(struct virtio_blk_req);
     disk.virtq.desc[idx[0]].flags = VRING_DESC_F_NEXT;  // device reads this.
     disk.virtq.desc[idx[0]].next  = idx[1];
 
-    disk.virtq.desc[idx[1]].addr = KVA_TO_PA(b->data);
+    disk.virtq.desc[idx[1]].addr = KVA_TO_PA(b->data);  // b->data is allocated through kallocpage, so use KVA
     disk.virtq.desc[idx[1]].len  = PGSIZE;
     if (write)
         disk.virtq.desc[idx[1]].flags = 0;  // device reads b->data
