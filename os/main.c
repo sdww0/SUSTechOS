@@ -215,13 +215,15 @@ static void bootcpu_init() {
     plicinit();
     kpgmgrinit();
     uvm_init();
-    file_init();
-    bio_init();
+    fs_init();
     user_console_init();
     proc_init();
     allocator_init(&kstrbuf, "kstrbuf", KSTRING_MAX, 4096);
     loader_init();
-    load_init_app();
+    // load_init_app();
+
+    extern void fstest(uint64);
+    create_kthread(fstest, 0);
 
     timer_init();
     plicinithart();

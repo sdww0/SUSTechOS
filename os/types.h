@@ -15,6 +15,8 @@ typedef short int16;
 typedef int int32;
 typedef long int64;
 
+typedef long long loff_t;
+
 #define NULL  ((void *)0)
 #define true  1
 #define false 0

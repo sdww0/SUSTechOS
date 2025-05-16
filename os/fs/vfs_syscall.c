@@ -1,0 +1,142 @@
+#include "defs.h"
+#include "fs.h"
+
+int vfs_create(struct file** out, char* name) {
+    return vfs_open(out, name, O_CREAT | O_WRONLY | O_TRUNC);
+}
+
+int vfs_open(struct file** out, char* name, uint32 oflags) {
+    *out = NULL;
+    struct inode* ind = NULL;
+
+    if (oflags & O_CREAT) {
+        // create a new file
+        struct dentry dentry;
+
+        struct inode* diri = dlookup_parent(name, dentry.name);
+        if (diri == NULL)
+            return -ENOENT;
+
+        if (!(diri->imode & IMODE_DIR)) {
+            iunlockput(diri);
+            return -EINVAL;
+        }
+
+        if (diri->iops->lookup(diri, &dentry) == 0) {
+            // file exists
+            ind = dentry.ind;
+            assert(ind);
+            if (!(ind->imode & IMODE_REG)) {
+                iunlockput(ind);
+                iunlockput(diri);
+                return -EINVAL;
+            }
+        } else {
+            // file does not exist, create it
+            if (diri->iops->create(diri, &dentry) != 0) {
+                iunlockput(diri);
+                return -EINVAL;
+            }
+            ind = dentry.ind;
+        }        
+        iunlockput(diri);
+
+        // diri is out of scope, unlock and drop reference
+        //  , but ind is locked
+    } else {
+        ind = dlookup(name);
+        if (ind == NULL)
+            return -ENOENT;
+    }
+    // ind is locked here.
+
+    if (ind->fops == NULL) {
+        iunlockput(ind);
+        return -EINVAL;
+    }
+
+    if (oflags & O_TRUNC) {
+        ind->size = 0;
+        imarkdirty(ind);
+    }
+
+    iunlock(ind);
+    // unlock, but we still hold a reference to ind in f->private
+
+    struct file* f = filealloc();
+    f->private     = ind;
+    f->ops         = ind->fops;
+    f->mode        = FMODE_READ | FMODE_WRITE;
+
+    *out = f;
+    return 0;
+}
+
+int vfs_close(struct file* f) {
+    assert(f != NULL);
+    fput(f);
+    return 0;
+}
+
+int vfs_read(struct file* f, void* __either buf, loff_t len) {
+    int ret = -EINVAL;
+
+    if (!(f->mode & FMODE_READ))
+        return -EINVAL;
+
+    // accessing f->ops does not require holding the lock
+    //  , because f->ops is set when the file is created and never changed
+    if (f->ops->read) {
+        struct inode* inode = file_inode(f);
+        flock(f);
+        ilock(inode);
+        ret = f->ops->read(f, buf, len);
+        iunlock(inode);
+        funlock(f);
+    }
+
+    return ret;
+}
+
+int vfs_write(struct file* f, void* __either buf, loff_t len) {
+    assert(f != NULL);
+
+    int ret = -EINVAL;
+
+    if (!(f->mode & FMODE_WRITE))
+        return -EINVAL;
+
+    if (f->ops->write) {
+        struct inode* inode = file_inode(f);
+        flock(f);
+        ilock(inode);
+        ret = f->ops->write(f, buf, len);
+        iunlock(inode);
+        funlock(f);
+    }
+
+    return ret;
+}
+
+int vfs_lseek(struct file* f, loff_t offset, int whence) {
+    assert(f != NULL);
+    struct inode* inode = file_inode(f);
+    flock(f);
+    if (whence == SEEK_SET)
+        f->pos = offset;
+    else if (whence == SEEK_CUR)
+        f->pos += offset;
+    else if (whence == SEEK_END) {
+        ilock(inode);
+        loff_t size = inode->size;
+        iunlock(inode);
+        f->pos = size + offset;
+    } else {
+        funlock(f);
+        return -EINVAL;
+    }
+    loff_t pos = f->pos;
+    funlock(f);
+
+    return pos;
+}

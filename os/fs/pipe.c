@@ -34,11 +34,11 @@ int pipealloc(struct file **f0, struct file **f1) {
     pi->nwrite    = 0;
     pi->nread     = 0;
     spinlock_init(&pi->lock, "pipe");
-    (*f0)->mode    = FMODE_READ | FTYPE_PIPE;
+    (*f0)->mode    = FMODE_READ;
     (*f0)->ops     = &pipeops;
     (*f0)->private = pi;
 
-    (*f1)->mode    = FMODE_WRITE | FTYPE_PIPE;
+    (*f1)->mode    = FMODE_WRITE;
     (*f1)->ops     = &pipeops;
     (*f1)->private = pi;
     return 0;
@@ -73,7 +73,7 @@ int pipeclose(struct file *f) {
     return 0;
 }
 
-int pipewrite(struct file *f, char *__user addr, int n) {
+int pipewrite(struct file *f, void *__user addr, loff_t n) {
     int i           = 0;
     struct proc *pr = curr_proc();
     struct pipe *pi = f->private;
@@ -105,7 +105,7 @@ int pipewrite(struct file *f, char *__user addr, int n) {
     return i;
 }
 
-int piperead(struct file *f, char *__user addr, int n) {
+int piperead(struct file *f, void *__user addr, loff_t n) {
     int i;
     struct proc *pr = curr_proc();
     struct pipe *pi = f->private;

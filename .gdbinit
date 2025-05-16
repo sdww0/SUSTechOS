@@ -10,3 +10,10 @@ set riscv use-compressed-breakpoints yes
 b *0x80200000
 #b *0x3ffffff000
 #b kerneltrap
+
+
+define btkerneltrap
+    frame function kernel_trap
+    set $s0=ktf->s0
+    bt
+end

@@ -170,8 +170,8 @@ void uart_intr() {
 
 // define a file_operations for user-space console: only support read & write.
 
-static int user_console_read(struct file *file, char *__user buf, int len);
-static int user_console_write(struct file *file, char *__user buf, int len);
+static int user_console_read(struct file *file, void * __user buf, loff_t len);
+static int user_console_write(struct file *file, void * __user buf, loff_t len);
 
 static struct file_operations uart_file_ops = {
     .read  = user_console_read,
@@ -183,17 +183,17 @@ void user_console_init() {
     assert(stdout == NULL && stdin == NULL);
 
     stdout          = filealloc();
-    stdout->mode    = FMODE_WRITE | FMODE_DEVICE;
+    stdout->mode    = FMODE_WRITE;
     stdout->ops     = &uart_file_ops;
     stdout->private = NULL;
 
     stdin          = filealloc();
-    stdin->mode    = FMODE_READ | FMODE_DEVICE;
+    stdin->mode    = FMODE_READ;
     stdin->ops     = &uart_file_ops;
     stdin->private = NULL;
 }
 
-static int user_console_write(struct file *file, char *__user buf, int len) {
+static int user_console_read(struct file *file, void * __user buf, loff_t len) {
     if (len <= 0)
         return -EINVAL;
     len = MIN(len, PGSIZE);
@@ -239,7 +239,7 @@ err:
     return ret;
 }
 
-static int user_console_read(struct file *file, char *__user buf, int n) {
+static int user_console_write(struct file *file, void * __user buf, loff_t n) {
     int target;
     int c;
     char cbuf;

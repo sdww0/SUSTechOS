@@ -181,7 +181,7 @@ int64 sys_read(int fd, uint64 __user va, uint64 len) {
     if (f == NULL) {
         return -EBADF;
     }
-    return fileread(f, (char *)va, len);
+    return vfs_read(f, (char *)va, len);
 }
 
 int64 sys_write(int fd, uint64 __user va, uint len) {
@@ -190,7 +190,7 @@ int64 sys_write(int fd, uint64 __user va, uint len) {
     if (f == NULL) {
         return -EBADF;
     }
-    return filewrite(f, (char *)va, len);
+    return vfs_write(f, (char *)va, len);
 }
 
 int64 sys_pipe(int __user fds[2]) {

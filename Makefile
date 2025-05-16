@@ -13,7 +13,7 @@ PY = python3
 GDB = $(TOOLPREFIX)gdb
 CP = cp
 BUILDDIR = build
-C_SRCS := $(wildcard $K/*.c) $(wildcard $K/drivers/*.c) $(wildcard $K/ktest/*.c) $(wildcard $K/fs/*.c)
+C_SRCS := $(wildcard $K/*.c) $(wildcard $K/drivers/*.c) $(wildcard $K/ktest/*.c) $(wildcard $K/fs/*.c)  $(wildcard $K/ramfs/*.c)
 AS_SRCS := $(wildcard $K/*.S)
 
 ifeq (,$(findstring $K/link_app.S,$(AS_SRCS)))
@@ -28,7 +28,7 @@ HEADER_DEP := $(addsuffix .d, $(basename $(C_OBJS)))
 
 -include $(HEADER_DEP)
 
-CFLAGS := -no-pie -Wall -Wno-unused-variable -Werror -O2 -fno-omit-frame-pointer -ggdb3 -march=rv64g
+CFLAGS := -no-pie -Wall -Wno-unused-variable -Wno-unused-function -Werror -O2 -fno-omit-frame-pointer -ggdb3 -march=rv64g
 CFLAGS += -MD
 CFLAGS += -mcmodel=medany
 CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax -msmall-data-limit=0
@@ -111,16 +111,17 @@ QEMUOPTS = \
 	-kernel build/kernel	\
 	-drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 
-run: build/kernel
-	$(QEMU) $(QEMUOPTS)
-
-runsmp: build/kernel
-	$(QEMU) -smp 4 $(QEMUOPTS)
-
 # QEMU's gdb stub command line changed in 0.11
 QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::3333"; \
 	else echo "-s -p 3333"; fi)
+
+
+run: build/kernel
+	$(QEMU) $(QEMUOPTS) $(QEMUGDB)
+
+runsmp: build/kernel
+	$(QEMU) -smp 4 $(QEMUOPTS) $(QEMUGDB)
 
 debug: build/kernel .gdbinit
 	$(QEMU) $(QEMUOPTS) -S $(QEMUGDB)

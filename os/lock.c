@@ -120,6 +120,7 @@ void sleeplock_init(struct sleeplock *lk, char *name)
 
 void acquiresleep(struct sleeplock *lk)
 {
+	assert(!holdingsleep(lk));
 	acquire(&lk->lk);
 	while (lk->locked) {
 		sleep(lk, &lk->lk);
@@ -131,6 +132,7 @@ void acquiresleep(struct sleeplock *lk)
 
 void releasesleep(struct sleeplock *lk)
 {
+	assert(holdingsleep(lk));
 	acquire(&lk->lk);
 	lk->locked = 0;
 	lk->pid = 0;

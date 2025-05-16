@@ -64,7 +64,8 @@ struct proc {
     struct trapframe *__kva trapframe;  // data page for trampoline.S
     uint64 __kva kstack;                // Virtual address of kernel stack
     struct context context;             // swtch() here to run process
-    struct file *fdtable[NPROCFILE];        // File descriptor table
+    struct file *fdtable[NPROCFILE];    // File descriptor table
+    struct inode *cwd;                  // current working directory
 };
 
 static inline int cpuid() {
@@ -88,6 +89,7 @@ extern struct proc *init_proc;
 
 void proc_init();
 struct proc *allocproc();
+int create_kthread(void (*fn)(uint64), uint64 arg);
 int fork();
 int exec(char *name, char *arg[]);
 int wait(int, int *);
