@@ -16,6 +16,7 @@ struct ramfs_inode {
     uint32 ino;
     imode_t imode;
     loff_t size;
+    int nlinks;
     struct ramfs_inode* next;
     union {
         void* filedata;

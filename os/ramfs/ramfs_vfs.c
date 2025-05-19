@@ -74,7 +74,9 @@ void ramfs_write_inode(struct inode* ind) {
     // no need to write the ramfs_inode.
     // but we need to update the size of the inode.
     struct ramfs_inode* rind = ind->private;
+    rind->imode = ind->imode;
     rind->size = ind->size;
+    rind->nlinks = ind->nlinks;
 }
 
 static struct sb_operations ramfs_ops = {
@@ -105,7 +107,9 @@ int ramfs_mkdir(struct inode *dir, struct dentry *dentry) {
     struct ramfs_inode* child = ramfs_create_inode(sb, parent, dentry->name, IMODE_DIR);
     ramfs_create_inode(sb, child, ".", IMODE_DIR);
     ramfs_create_inode(sb, parent, "..", IMODE_DIR);
+    dir->nlinks++;
     dir->size = parent->size;
+    imarkdirty(dir);    
     
     // fill the vfs inode
     dentry->ind = ramfs_iget(dir->sb, child->ino);
