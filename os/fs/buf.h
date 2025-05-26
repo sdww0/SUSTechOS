@@ -14,7 +14,7 @@ struct buf {
     sleeplock_t lock;
     int valid;                // has data been read from disk?
     volatile int disk_using;  // does disk read/write complete?
-    uint64 dev;
+    uint64 dev;               // which device? although we only support one device now
     uint64 blockno;
     uint8 *__kva data;  // allocated by kallocpage, although we only use 512 bytes of 4KiB page
 };

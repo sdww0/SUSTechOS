@@ -27,7 +27,7 @@
 #define PHYS_MEM_SIZE (128ull * 1024 * 1024)
 
 // File system defines
-#define BSIZE     (512)
+#define BSIZE     (4096) // block size
 #define NBUF      (100)
 #define NFILE     (200)
 

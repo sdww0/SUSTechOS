@@ -6,7 +6,7 @@ int vfs_create(struct file** out, char* name) {
 }
 
 int vfs_open(struct file** out, char* name, uint32 oflags) {
-    *out = NULL;
+    *out              = NULL;
     struct inode* ind = NULL;
 
     if (oflags & O_CREAT) {
@@ -38,7 +38,7 @@ int vfs_open(struct file** out, char* name, uint32 oflags) {
                 return -EINVAL;
             }
             ind = dentry.ind;
-        }        
+        }
         iunlockput(diri);
 
         // diri is out of scope, unlock and drop reference
@@ -87,11 +87,8 @@ int vfs_read(struct file* f, void* __either buf, loff_t len) {
     // accessing f->ops does not require holding the lock
     //  , because f->ops is set when the file is created and never changed
     if (f->ops->read) {
-        struct inode* inode = file_inode(f);
         flock(f);
-        ilock(inode);
         ret = f->ops->read(f, buf, len);
-        iunlock(inode);
         funlock(f);
     }
 
@@ -107,11 +104,8 @@ int vfs_write(struct file* f, void* __either buf, loff_t len) {
         return -EINVAL;
 
     if (f->ops->write) {
-        struct inode* inode = file_inode(f);
         flock(f);
-        ilock(inode);
         ret = f->ops->write(f, buf, len);
-        iunlock(inode);
         funlock(f);
     }
 
@@ -139,4 +133,101 @@ int vfs_lseek(struct file* f, loff_t offset, int whence) {
     funlock(f);
 
     return pos;
+}
+
+int vfs_mkdir(const char* pathname) {
+    char name[256];
+    strncpy(name, pathname, sizeof(name) - 1);
+    struct dentry dentry;
+    struct inode* ind = NULL;
+    int ret           = 0;
+
+    struct inode* ip = dlookup_parent(name, dentry.name);
+    if (ip == NULL)
+        return -ENOENT;
+
+    if (!(ip->imode & IMODE_DIR)) {
+        iunlockput(ip);
+        return -EINVAL;
+    }
+
+    if (ip->iops->lookup(ip, &dentry) == 0) {
+        // file exists
+        iunlockput(ip);
+        iunlockput(dentry.ind);
+        return -EEXIST;
+    }
+
+    // file does not exist, create it
+    ret = ip->iops->mkdir(ip, &dentry);
+    iunlockput(ip);
+    return ret;
+}
+
+int vfs_rmdir(const char* pathname) {
+    char name[256];
+    strncpy(name, pathname, sizeof(name) - 1);
+    struct dentry dentry = {.name = {0}, .ind = NULL};
+
+    int ret          = 0;
+    struct inode* ip = dlookup_parent(name, dentry.name);
+    if (ip == NULL)
+        return -ENOENT;
+    if (!(ip->imode & IMODE_DIR)) {
+        ret = -EINVAL;
+        goto err;
+    }
+    if (ip->iops->lookup(ip, &dentry) != 0) {
+        ret = -ENOENT;
+        goto err;
+    }
+    if (!(dentry.ind->imode & IMODE_DIR)) {
+        ret = -EINVAL;
+        goto err;
+    }
+    iunlockput(dentry.ind);
+    ret = ip->iops->rmdir(ip, &dentry);
+    iunlockput(ip);
+    return ret;
+
+err:
+    iunlockput(ip);
+    if (dentry.ind != NULL) {
+        iunlockput(dentry.ind);
+    }
+    return ret;
+}
+
+int vfs_unlink(const char* pathname) {
+    char name[256];
+    strncpy(name, pathname, sizeof(name) - 1);
+    int ret              = 0;
+    struct dentry dentry = {.name = {0}, .ind = NULL};
+
+    struct inode* ip = dlookup_parent(name, dentry.name);
+    if (ip == NULL)
+        return -ENOENT;
+    if (!(ip->imode & IMODE_DIR)) {
+        ret = -EINVAL;
+        goto err;
+    }
+    if (ip->iops->lookup(ip, &dentry) != 0) {
+        ret = -ENOENT;
+        goto err;
+    }
+    if (!(dentry.ind->imode & IMODE_REG || dentry.ind->imode & IMODE_DEVICE)) {
+        ret = -EINVAL;
+        goto err;
+    }
+    iunlockput(dentry.ind);
+    ret = ip->iops->unlink(ip, &dentry);
+    iunlockput(ip);
+    return ret;
+
+err:
+    iunlockput(ip);
+    if (dentry.ind != NULL) {
+        iunlockput(dentry.ind);
+    }
+    return ret;
 }

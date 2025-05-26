@@ -10,3 +10,4 @@ kernel_app.ld
 *.asm
 *.sym
 *.img
+mkfs

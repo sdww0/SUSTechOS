@@ -1,4 +1,3 @@
-#define LOG_LEVEL_DEBUG
 #include "buf.h"
 #include "debug.h"
 #include "defs.h"
@@ -146,14 +145,45 @@ void iput(struct inode* inode) {
     assert(inode != NULL);
 
     acquire(&inode->sb->lock);
+    if (inode->ref == 1 && inode->nlinks == 0) {
+        debugf("ino %d ref %d and nlink 0, delete_inode", inode->ino, inode->ref);
+        // inode has no links and no other references: delete it on disk.
+
+        // If ref == 1, no other process can "see" a pointer to this inode.
+        // Thus this acquiresleep won't block.
+        acquiresleep(&inode->lock);
+
+        // RACE CONDITION WARNING:
+        // release the linked-list lock, but we still keep the inode in the list (!!!)
+
+        // If another process tries to `iget_locked` with the same ino, it will find this inode object in the sb's list.
+        //    Although the inode object is still alive and valid, it is actually a to-be-deleted inode.
+        //    Soon the on-disk inode is deleted, and the in-memory inode is invalid and a phantum, causing a race condition.
+
+        // However, we will prove that it's impossible that another process will `iget_locked` _with the same ino_.
+        
+        // 1. nlinks == 0 means no parent directory holds a link to this inode.
+        //    All accesses (open, dlookup) to this ino must go through the parent directory. The reading and the removal of this ino from its parent directory are protected by the parent-inode's sleeplock.
+        // 2. The underlying fs-implementation must not make the ino available to `ialloc`, aka doesn't free it in the bitmap.
+
+        release(&inode->sb->lock);
+
+        if (inode->sb->ops->delete_inode) {
+            inode->sb->ops->delete_inode(inode);
+        }
+
+        releasesleep(&inode->lock);
+
+        acquire(&inode->sb->lock);
+        assert(inode->ref == 1);
+    }
+
     inode->ref--;
     debugf("ino %d ref %d", inode->ino, inode->ref);
     if (inode->ref > 0) {
         release(&inode->sb->lock);
         return;
     }
-
-    // now we are the only one holding the inode
 
     // remove the inode from the sb's list
     struct inode* cur = inode->sb->list;
@@ -169,8 +199,8 @@ void iput(struct inode* inode) {
         }
     }
     release(&inode->sb->lock);
-
-    inode->sb->ops->free_inode(inode);
+    if (inode->sb->ops->free_inode)
+        inode->sb->ops->free_inode(inode);
     kfree(&allocator_inode, inode);
 }
 
@@ -183,6 +213,7 @@ void imarkdirty(struct inode* inode) {
 void ilock(struct inode* inode) {
     debugf("ino %d ref %d", inode->ino, inode->ref);
     assert(inode != NULL);
+    assert(inode->ref > 0);
     acquiresleep(&inode->lock);
 }
 

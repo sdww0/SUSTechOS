@@ -13,7 +13,7 @@ PY = python3
 GDB = $(TOOLPREFIX)gdb
 CP = cp
 BUILDDIR = build
-C_SRCS := $(wildcard $K/*.c) $(wildcard $K/drivers/*.c) $(wildcard $K/ktest/*.c) $(wildcard $K/fs/*.c)  $(wildcard $K/ramfs/*.c)
+C_SRCS := $(wildcard $K/*.c) $(wildcard $K/drivers/*.c) $(wildcard $K/ktest/*.c) $(wildcard $K/fs/*.c)  $(wildcard $K/ramfs/*.c)  $(wildcard $K/simplefs/*.c)
 AS_SRCS := $(wildcard $K/*.S)
 
 ifeq (,$(findstring $K/link_app.S,$(AS_SRCS)))
@@ -116,19 +116,22 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::3333"; \
 	else echo "-s -p 3333"; fi)
 
+fs.img: .FORCE
+	gcc -O2 -g ./scripts/mkfs.c -o mkfs
+	./mkfs fs.img 1024 4096
 
-run: build/kernel
+run: build/kernel fs.img
 	$(QEMU) $(QEMUOPTS) $(QEMUGDB)
 
-runsmp: build/kernel
+runsmp: build/kernel fs.img
 	$(QEMU) -smp 4 $(QEMUOPTS) $(QEMUGDB)
 
-debug: build/kernel .gdbinit
+debug: build/kernel fs.img .gdbinit
 	$(QEMU) $(QEMUOPTS) -S $(QEMUGDB)
 	# sleep 1
 	# $(GDB)
 
-debugsmp: build/kernel .gdbinit
+debugsmp: build/kernel fs.img .gdbinit
 	$(QEMU) $(QEMUOPTS) -smp 4 -S $(QEMUGDB)
 	# sleep 1
 	# $(GDB)

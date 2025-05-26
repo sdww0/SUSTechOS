@@ -28,5 +28,9 @@ typedef long long loff_t;
 #define ECHILD 3
 #define ENOENT 4
 #define EBADF  5
+#define EEXIST 6
+#define ENOSPC 7
+#define ENOTEMPTY 8
+#define EFBIG 9
 
 #endif  // TYPES_H

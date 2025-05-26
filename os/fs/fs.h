@@ -7,7 +7,7 @@
 
 extern struct superblock *rootfs;
 
-#define DIRSIZ 32
+#define DIRSIZ 32   // max length of a directory entry name
 #define __either
 
 typedef uint32 fmode_t;
@@ -70,7 +70,7 @@ struct inode {
     sleeplock_t lock;
     // sleeplock protects following fields
     loff_t size;  // file size
-    int nlinks;
+    uint16 nlinks;
 };
 
 struct dentry;
@@ -86,12 +86,11 @@ struct inode_operations {
     int (*unlink)(struct inode *dir, struct dentry *dentry);
     int (*mkdir)(struct inode *dir, struct dentry *dentry);
     int (*rmdir)(struct inode *dir, struct dentry *dentry);
-    int (*iterate)(struct inode *dir, struct dentry *dentry, int (*callback)(struct inode *ind, struct dentry *dentry));
 };
 
 #define IMODE_DEVICE 0x100
-#define IMODE_REG    0x400
-#define IMODE_DIR    0x800
+#define IMODE_REG    0x200
+#define IMODE_DIR    0x400
 
 // struct dentry is a directory entry, which is a indirection layer between vfs ans syscalls.
 // we do not use dentry as a cache, its lifetime is the same as the syscall process.
@@ -108,7 +107,7 @@ struct superblock {
     struct sb_operations *ops;
     struct inode *root;
 
-    // For each superblock, we have a list of inodes.
+    // For each superblock, we have a list of *active* inodes.
     // The list is protected by the lock.
     spinlock_t lock;
     struct inode *list;
@@ -116,17 +115,23 @@ struct superblock {
 
 struct sb_operations {
     /**
-     * @brief free_inode is called when an inode is freed.
+     * @brief free_inode is called when an in-memory inode object is freed.
      * holds the inode->lock. but we are the only one holding the inode.
      *
-     * should free the inode->private.
+     * ONLY free the inode->private.
      */
     void (*free_inode)(struct inode *inode);
     /**
-     * @brief When the inode is dirty and is freed, write it back to disk.
-     * holds the inode->lock. but we are the only one holding the inode.
+     * @brief When the inode is dirty, write it back to disk.
+     * holds the inode->lock.
      */
     void (*write_inode)(struct inode *inode);
+
+    /**
+     * @brief Delete the inode on-disk.
+     * only called when we hold the last ref to it, AND nlinks == 0.
+     */
+    void (*delete_inode)(struct inode *inode);
 };
 
 #define major(dev)  ((dev) >> 16 & 0xFFFF)
@@ -186,5 +191,8 @@ int vfs_close(struct file *f);
 int vfs_read(struct file *f, void *__user buf, loff_t len);
 int vfs_write(struct file *f, void *__user buf, loff_t len);
 int vfs_lseek(struct file *f, loff_t offset, int whence);
+int vfs_mkdir(const char* pathname);
+int vfs_rmdir(const char* pathname);
+int vfs_unlink(const char* pathname);
 
 #endif
