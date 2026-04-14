@@ -116,9 +116,22 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::3333"; \
 	else echo "-s -p 3333"; fi)
 
+FS_TYPE ?= simplefs
+FS_BLOCK_SIZE ?= 4096
+FS_BLOCKS ?= 4096
+
 fs.img: .FORCE
-	gcc -O2 -g ./scripts/mkfs.c -o mkfs
-	./mkfs fs.img 1024 4096
+ifeq ($(FS_TYPE),ext2)
+	@mkdir -p build
+	rm -f fs.img build/ext2_hello
+	printf '' > build/ext2_hello
+	mke2fs -q -t ext2 -b $(FS_BLOCK_SIZE) -I 128 -O none -F fs.img $(FS_BLOCKS)
+	debugfs -w -R "write build/ext2_hello /hello" fs.img >/dev/null 2>&1
+else
+	@mkdir -p build
+	gcc -O2 -g ./scripts/mkfs.c -o build/mkfs
+	./build/mkfs fs.img 1024 4096
+endif
 
 run: build/kernel fs.img
 	$(QEMU) $(QEMUOPTS) $(QEMUGDB)
@@ -142,4 +155,3 @@ user:
 	make -C user
 
 test: user run
-
