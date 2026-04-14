@@ -13,6 +13,11 @@ int main(int argc, char **argv) {
     unlink(FIFO_PATH);
     int ret = mkfifo(FIFO_PATH);
     CHECK(ret == 0, "mkfifo %s ret=%d", FIFO_PATH, ret);
+    CHECK(mkfifo(FIFO_PATH) < 0, "duplicate mkfifo unexpectedly succeeded");
+
+    struct stat st;
+    CHECK(stat(FIFO_PATH, &st) == 0, "stat fifo failed");
+    CHECK((st.mode & ST_MODE_FIFO) != 0, "fifo mode invalid mode=%x", st.mode);
 
     int pid = fork();
     CHECK(pid >= 0, "fork reader failed pid=%d", pid);
@@ -22,6 +27,11 @@ int main(int argc, char **argv) {
         if (rfd < 0) {
             printf("FAIL fs_score_fifo child open ret=%d\n", rfd);
             exit(2);
+        }
+        struct stat cst;
+        if (fstat(rfd, &cst) != 0 || (cst.mode & ST_MODE_FIFO) == 0) {
+            printf("FAIL fs_score_fifo child fstat\n");
+            exit(4);
         }
         memset(buf, 0, sizeof(buf));
         int n = read(rfd, buf, sizeof(msg) - 1);
@@ -43,7 +53,7 @@ int main(int argc, char **argv) {
     }
 
     write_full(wfd, msg, sizeof(msg) - 1);
-    CHECK(close(wfd) == 0, "close fifo writer failed");
+    close_ok(wfd);
 
     int status = -1;
     CHECK(wait(pid, &status) == pid, "wait fifo reader failed");

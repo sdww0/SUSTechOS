@@ -21,6 +21,20 @@ static void verify_block(int fd, int blockno) {
     CHECK(memcmp(block, expected, sizeof(block)) == 0, "block %d data mismatch", blockno);
 }
 
+static void verify_interesting_blocks(int fd, int blocks) {
+    verify_block(fd, 0);
+    verify_block(fd, 11);
+    verify_block(fd, 12);
+    verify_block(fd, 13);
+    if (blocks > 1035)
+        verify_block(fd, 1035);
+    if (blocks > 1036)
+        verify_block(fd, 1036);
+    if (blocks > 17000)
+        verify_block(fd, 17000);
+    verify_block(fd, blocks - 1);
+}
+
 int main(int argc, char **argv) {
     stdout_nobuf();
 
@@ -41,17 +55,13 @@ int main(int argc, char **argv) {
     write_blocks(fd, blocks);
     CHECK(file_size(INDEX_PATH) == blocks * SCORE_BLOCK_SIZE, "file size after index write mismatch");
 
-    verify_block(fd, 0);
-    verify_block(fd, 11);
-    verify_block(fd, 12);
-    verify_block(fd, 13);
-    if (blocks > 1024)
-        verify_block(fd, 1024);
-    if (blocks > 17000)
-        verify_block(fd, 17000);
-    verify_block(fd, blocks - 1);
+    verify_interesting_blocks(fd, blocks);
+    close_ok(fd);
 
-    CHECK(close(fd) == 0, "close index file failed");
+    fd = open(INDEX_PATH, O_RDONLY);
+    CHECK(fd >= 0, "reopen index file ret=%d", fd);
+    verify_interesting_blocks(fd, blocks);
+    close_ok(fd);
     CHECK(unlink(INDEX_PATH) == 0, "unlink index file failed");
 
     printf("PASS fs_score_index %s blocks=%d\n", mode, blocks);

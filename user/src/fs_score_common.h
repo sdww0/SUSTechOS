@@ -26,6 +26,10 @@ static inline void cleanup_path(char *path) {
     rmdir(path);
 }
 
+static inline void close_ok(int fd) {
+    CHECK(close(fd) == 0, "close fd=%d failed", fd);
+}
+
 static inline void write_full(int fd, void *buf, int len) {
     int off = 0;
     while (off < len) {
@@ -44,6 +48,16 @@ static inline void read_full(int fd, void *buf, int len) {
     }
 }
 
+static inline void read_at_full(int fd, int off, void *buf, int len) {
+    CHECK(lseek(fd, off, SEEK_SET) == off, "seek read_at off=%d failed", off);
+    read_full(fd, buf, len);
+}
+
+static inline void write_at_full(int fd, int off, void *buf, int len) {
+    CHECK(lseek(fd, off, SEEK_SET) == off, "seek write_at off=%d failed", off);
+    write_full(fd, buf, len);
+}
+
 static inline void fill_pattern(char *buf, int len, int seed) {
     for (int i = 0; i < len; i++) {
         buf[i] = (char)('A' + ((seed * 17 + i) % 26));
@@ -55,6 +69,19 @@ static inline int file_size(char *path) {
     int ret = stat(path, &st);
     CHECK(ret == 0, "stat %s ret=%d", path, ret);
     return (int)st.size;
+}
+
+static inline void expect_file_bytes(char *path, char *expect, int len) {
+    char buf[256];
+    CHECK(len <= (int)sizeof(buf), "expect_file_bytes len too large len=%d", len);
+
+    int fd = open(path, O_RDONLY);
+    CHECK(fd >= 0, "open %s ret=%d", path, fd);
+    memset(buf, 0, sizeof(buf));
+    read_full(fd, buf, len);
+    CHECK(memcmp(buf, expect, len) == 0, "file bytes mismatch path=%s", path);
+    CHECK(read(fd, buf, 1) == 0, "file has unexpected trailing bytes path=%s", path);
+    close_ok(fd);
 }
 
 static inline int dir_contains(char *path, char *name) {
