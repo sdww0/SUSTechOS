@@ -220,10 +220,13 @@ static void bootcpu_init() {
     proc_init();
     allocator_init(&kstrbuf, "kstrbuf", KSTRING_MAX, 4096);
     loader_init();
-    // load_init_app();
 
+#ifdef RUN_KERNEL_FSTEST
     extern void fstest(uint64);
     create_kthread(fstest, 0);
+#else
+    load_init_app();
+#endif
 
     timer_init();
     plicinithart();

@@ -75,6 +75,7 @@ static void first_sched_ret(void) {
         intr_on();
         // do fs init here.
         fs_init();
+        fs_mount_root_once();
     }
     intr_off();
     usertrapret();
@@ -171,6 +172,10 @@ static void freeproc(struct proc *p) {
         acquire(&p->mm->lock);
         mm_free(p->mm);
     }
+    if (p->cwd) {
+        iput(p->cwd);
+        p->cwd = NULL;
+    }
 
     p->mm      = NULL;
     p->vma_brk = NULL;
@@ -257,6 +262,10 @@ int fork() {
             fget(p->fdtable[i]);
             np->fdtable[i] = p->fdtable[i];
         }
+    }
+    if (p->cwd) {
+        iget(p->cwd);
+        np->cwd = p->cwd;
     }
 
     // Cause fork to return 0 in the child.

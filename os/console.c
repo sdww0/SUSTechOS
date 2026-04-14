@@ -193,53 +193,7 @@ void user_console_init() {
     stdin->private = NULL;
 }
 
-static int user_console_read(struct file *file, void * __user buf, loff_t len) {
-    if (len <= 0)
-        return -EINVAL;
-    len = MIN(len, PGSIZE);
-
-    int ret;
-    struct proc *p = curr_proc();
-    struct mm *mm;
-
-    char *kbuf = kallocpage();
-    if (kbuf == NULL) {
-        return -ENOMEM;
-    }
-    kbuf = (char *)PA_TO_KVA(kbuf);
-
-    acquire(&p->lock);
-    mm = p->mm;
-    acquire(&mm->lock);
-    release(&p->lock);
-
-    if ((ret = copy_from_user(mm, kbuf, (uint64)buf, len)) < 0) {
-        release(&mm->lock);
-        goto err;
-    }
-    release(&mm->lock);
-
-    // do not interfere with kernel panic's print.
-    acquire_kprint();
-    // do not interfere with other user's print.
-    acquire(&uart_tx_lock);
-
-    for (int64 i = 0; i < len; i++) {
-        consputc(kbuf[i]);
-    }
-
-    release(&uart_tx_lock);
-    release_kprint();
-
-    kfreepage((void *)KVA_TO_PA(kbuf));
-    return len;
-
-err:
-    kfreepage((void *)KVA_TO_PA(kbuf));
-    return ret;
-}
-
-static int user_console_write(struct file *file, void * __user buf, loff_t n) {
+static int user_console_read(struct file *file, void * __user buf, loff_t n) {
     int target;
     int c;
     char cbuf;
@@ -295,4 +249,50 @@ static int user_console_write(struct file *file, void * __user buf, loff_t n) {
     release(&cons.lock);
 
     return target - n;
+}
+
+static int user_console_write(struct file *file, void * __user buf, loff_t len) {
+    if (len <= 0)
+        return -EINVAL;
+    len = MIN(len, PGSIZE);
+
+    int ret;
+    struct proc *p = curr_proc();
+    struct mm *mm;
+
+    char *kbuf = kallocpage();
+    if (kbuf == NULL) {
+        return -ENOMEM;
+    }
+    kbuf = (char *)PA_TO_KVA(kbuf);
+
+    acquire(&p->lock);
+    mm = p->mm;
+    acquire(&mm->lock);
+    release(&p->lock);
+
+    if ((ret = copy_from_user(mm, kbuf, (uint64)buf, len)) < 0) {
+        release(&mm->lock);
+        goto err;
+    }
+    release(&mm->lock);
+
+    // do not interfere with kernel panic's print.
+    acquire_kprint();
+    // do not interfere with other user's print.
+    acquire(&uart_tx_lock);
+
+    for (int64 i = 0; i < len; i++) {
+        consputc(kbuf[i]);
+    }
+
+    release(&uart_tx_lock);
+    release_kprint();
+
+    kfreepage((void *)KVA_TO_PA(kbuf));
+    return len;
+
+err:
+    kfreepage((void *)KVA_TO_PA(kbuf));
+    return ret;
 }

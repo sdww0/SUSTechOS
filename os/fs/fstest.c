@@ -6,7 +6,8 @@ extern void sfs_vfs_init();
 
 char largebuf[PGSIZE * 4];
 
-void fstest(uint64) {
+void fstest(uint64 unused) {
+    (void)unused;
     infof("fstest");
     char buf[512];
     int ret;
