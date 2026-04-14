@@ -112,6 +112,23 @@ int vfs_write(struct file* f, void* __either buf, loff_t len) {
     return ret;
 }
 
+int vfs_getdents(struct file* f, void* __either buf, loff_t len) {
+    assert(f != NULL);
+
+    int ret = -EINVAL;
+
+    if (!(f->mode & FMODE_READ))
+        return -EINVAL;
+
+    if (f->ops->iterate) {
+        flock(f);
+        ret = f->ops->iterate(f, buf, len);
+        funlock(f);
+    }
+
+    return ret;
+}
+
 int vfs_lseek(struct file* f, loff_t offset, int whence) {
     assert(f != NULL);
     struct inode* inode = file_inode(f);
@@ -160,6 +177,8 @@ int vfs_mkdir(const char* pathname) {
 
     // file does not exist, create it
     ret = ip->iops->mkdir(ip, &dentry);
+    if (dentry.ind != NULL)
+        iunlockput(dentry.ind);
     iunlockput(ip);
     return ret;
 }
@@ -185,8 +204,9 @@ int vfs_rmdir(const char* pathname) {
         ret = -EINVAL;
         goto err;
     }
-    iunlockput(dentry.ind);
+    iunlock(dentry.ind);
     ret = ip->iops->rmdir(ip, &dentry);
+    iput(dentry.ind);
     iunlockput(ip);
     return ret;
 
@@ -215,7 +235,7 @@ int vfs_unlink(const char* pathname) {
         ret = -ENOENT;
         goto err;
     }
-    if (!(dentry.ind->imode & IMODE_REG || dentry.ind->imode & IMODE_DEVICE)) {
+    if (!(dentry.ind->imode & IMODE_REG || dentry.ind->imode & IMODE_DEVICE || dentry.ind->imode & IMODE_FIFO)) {
         ret = -EINVAL;
         goto err;
     }
@@ -229,5 +249,39 @@ err:
     if (dentry.ind != NULL) {
         iunlockput(dentry.ind);
     }
+    return ret;
+}
+
+int vfs_mkfifo(const char* pathname) {
+    char name[256];
+    strncpy(name, pathname, sizeof(name) - 1);
+    struct dentry dentry = {.name = {0}, .ind = NULL};
+    int ret              = 0;
+
+    struct inode* ip = dlookup_parent(name, dentry.name);
+    if (ip == NULL)
+        return -ENOENT;
+
+    if (!(ip->imode & IMODE_DIR)) {
+        ret = -EINVAL;
+        goto out;
+    }
+
+    if (ip->iops->lookup(ip, &dentry) == 0) {
+        ret = -EEXIST;
+        goto out;
+    }
+
+    if (ip->iops->mkfifo == NULL) {
+        ret = -EINVAL;
+        goto out;
+    }
+
+    ret = ip->iops->mkfifo(ip, &dentry);
+
+out:
+    iunlockput(ip);
+    if (dentry.ind != NULL)
+        iunlockput(dentry.ind);
     return ret;
 }

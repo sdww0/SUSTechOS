@@ -21,6 +21,50 @@ static int fdalloc(struct file *f) {
     return -1;
 }
 
+static struct file *fdget(int fd) {
+    if (fd < 0 || fd >= NPROCFILE)
+        return NULL;
+    return curr_proc()->fdtable[fd];
+}
+
+static int fetch_path(uint64 __user upath, char **out) {
+    int ret;
+    char *path = kalloc(&kstrbuf);
+    if (path == NULL)
+        return -ENOMEM;
+
+    memset(path, 0, KSTRING_MAX);
+    struct proc *p = curr_proc();
+    acquire(&p->mm->lock);
+    ret = copystr_from_user(p->mm, path, upath, KSTRING_MAX);
+    release(&p->mm->lock);
+    if (ret < 0) {
+        kfree(&kstrbuf, path);
+        return ret;
+    }
+
+    *out = path;
+    return 0;
+}
+
+static void fill_stat_locked(struct inode *inode, struct stat *st) {
+    assert(holdingsleep(&inode->lock));
+    memset(st, 0, sizeof(*st));
+    st->ino    = inode->ino;
+    st->mode   = inode->imode;
+    st->nlinks = inode->nlinks;
+    st->size   = inode->size;
+}
+
+static int copy_stat_to_user(uint64 __user ust, struct stat *kst) {
+    int ret;
+    struct proc *p = curr_proc();
+    acquire(&p->mm->lock);
+    ret = copy_to_user(p->mm, ust, (char *)kst, sizeof(*kst));
+    release(&p->mm->lock);
+    return ret;
+}
+
 int64 sys_fork() {
     return fork();
 }
@@ -176,8 +220,7 @@ int64 sys_mmap() {
 }
 
 int64 sys_read(int fd, uint64 __user va, uint64 len) {
-    struct proc *p = curr_proc();
-    struct file *f = p->fdtable[fd];
+    struct file *f = fdget(fd);
     if (f == NULL) {
         return -EBADF;
     }
@@ -185,8 +228,7 @@ int64 sys_read(int fd, uint64 __user va, uint64 len) {
 }
 
 int64 sys_write(int fd, uint64 __user va, uint len) {
-    struct proc *p = curr_proc();
-    struct file *f = p->fdtable[fd];
+    struct file *f = fdget(fd);
     if (f == NULL) {
         return -EBADF;
     }
@@ -230,13 +272,143 @@ int64 sys_pipe(int __user fds[2]) {
 
 int64 sys_close(int fd) {
     struct proc *p = curr_proc();
-    struct file *f = p->fdtable[fd];
+    struct file *f = fdget(fd);
     if (f == NULL) {
         return -EBADF;
     }
     fput(f);
     p->fdtable[fd] = NULL;
     return 0;
+}
+
+int64 sys_gettimeofday(uint64 __user utv) {
+    struct timeval tv;
+
+    acquire(&tickslock);
+    uint64 now = ticks;
+    release(&tickslock);
+
+    tv.sec  = now / TICKS_PER_SEC;
+    tv.usec = (now % TICKS_PER_SEC) * (1000000 / TICKS_PER_SEC);
+
+    struct proc *p = curr_proc();
+    acquire(&p->mm->lock);
+    int ret = copy_to_user(p->mm, utv, (char *)&tv, sizeof(tv));
+    release(&p->mm->lock);
+    return ret;
+}
+
+int64 sys_open(uint64 __user upath, uint64 flags) {
+    int ret;
+    char *path = NULL;
+    struct file *f = NULL;
+
+    if ((ret = fetch_path(upath, &path)) < 0)
+        return ret;
+
+    ret = vfs_open(&f, path, flags);
+    kfree(&kstrbuf, path);
+    if (ret < 0)
+        return ret;
+
+    int fd = fdalloc(f);
+    if (fd < 0) {
+        vfs_close(f);
+        return -EBADF;
+    }
+    return fd;
+}
+
+int64 sys_lseek(int fd, uint64 offset, uint64 whence) {
+    struct file *f = fdget(fd);
+    if (f == NULL)
+        return -EBADF;
+    return vfs_lseek(f, offset, whence);
+}
+
+int64 sys_mkdir(uint64 __user upath) {
+    int ret;
+    char *path = NULL;
+
+    if ((ret = fetch_path(upath, &path)) < 0)
+        return ret;
+    ret = vfs_mkdir(path);
+    kfree(&kstrbuf, path);
+    return ret;
+}
+
+int64 sys_rmdir(uint64 __user upath) {
+    int ret;
+    char *path = NULL;
+
+    if ((ret = fetch_path(upath, &path)) < 0)
+        return ret;
+    ret = vfs_rmdir(path);
+    kfree(&kstrbuf, path);
+    return ret;
+}
+
+int64 sys_unlink(uint64 __user upath) {
+    int ret;
+    char *path = NULL;
+
+    if ((ret = fetch_path(upath, &path)) < 0)
+        return ret;
+    ret = vfs_unlink(path);
+    kfree(&kstrbuf, path);
+    return ret;
+}
+
+int64 sys_getdents(int fd, uint64 __user va, uint64 len) {
+    struct file *f = fdget(fd);
+    if (f == NULL)
+        return -EBADF;
+    return vfs_getdents(f, (char *)va, len);
+}
+
+int64 sys_stat(uint64 __user upath, uint64 __user ust) {
+    int ret;
+    char *path = NULL;
+    struct stat st;
+
+    if ((ret = fetch_path(upath, &path)) < 0)
+        return ret;
+
+    struct inode *inode = dlookup(path);
+    kfree(&kstrbuf, path);
+    if (inode == NULL)
+        return -ENOENT;
+
+    fill_stat_locked(inode, &st);
+    iunlockput(inode);
+    return copy_stat_to_user(ust, &st);
+}
+
+int64 sys_fstat(int fd, uint64 __user ust) {
+    struct file *f = fdget(fd);
+    if (f == NULL)
+        return -EBADF;
+
+    struct inode *inode = file_inode(f);
+    if (inode == NULL)
+        return -EINVAL;
+
+    struct stat st;
+    ilock(inode);
+    fill_stat_locked(inode, &st);
+    iunlock(inode);
+    return copy_stat_to_user(ust, &st);
+}
+
+int64 sys_mkfifo(uint64 __user upath) {
+    int ret;
+    char *path = NULL;
+
+    if ((ret = fetch_path(upath, &path)) < 0)
+        return ret;
+    ret = vfs_mkfifo(path);
+    kfree(&kstrbuf, path);
+    return ret;
 }
 
 void syscall() {
@@ -290,6 +462,36 @@ void syscall() {
             break;
         case SYS_close:
             ret = sys_close(args[0]);
+            break;
+        case SYS_gettimeofday:
+            ret = sys_gettimeofday(args[0]);
+            break;
+        case SYS_open:
+            ret = sys_open(args[0], args[1]);
+            break;
+        case SYS_lseek:
+            ret = sys_lseek(args[0], args[1], args[2]);
+            break;
+        case SYS_mkdir:
+            ret = sys_mkdir(args[0]);
+            break;
+        case SYS_rmdir:
+            ret = sys_rmdir(args[0]);
+            break;
+        case SYS_unlink:
+            ret = sys_unlink(args[0]);
+            break;
+        case SYS_getdents:
+            ret = sys_getdents(args[0], args[1], args[2]);
+            break;
+        case SYS_stat:
+            ret = sys_stat(args[0], args[1]);
+            break;
+        case SYS_fstat:
+            ret = sys_fstat(args[0], args[1]);
+            break;
+        case SYS_mkfifo:
+            ret = sys_mkfifo(args[0]);
             break;
         case SYS_ktest:
             ret = ktest_syscall(args);

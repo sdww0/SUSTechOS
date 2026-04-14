@@ -20,6 +20,16 @@
 #define SYS_pipe  24
 #define SYS_close 25
 
-#define SYS_gettimeofday 24
+#define SYS_gettimeofday 26
+
+#define SYS_open     27
+#define SYS_lseek    28
+#define SYS_mkdir    29
+#define SYS_rmdir    30
+#define SYS_unlink   31
+#define SYS_getdents 32
+#define SYS_stat     33
+#define SYS_fstat    34
+#define SYS_mkfifo   35
 
 #define SYS_ktest 99

@@ -80,6 +80,51 @@ gettimeofday:
  li a7, SYS_gettimeofday
  ecall
  ret
+.global open
+open:
+ li a7, SYS_open
+ ecall
+ ret
+.global lseek
+lseek:
+ li a7, SYS_lseek
+ ecall
+ ret
+.global mkdir
+mkdir:
+ li a7, SYS_mkdir
+ ecall
+ ret
+.global rmdir
+rmdir:
+ li a7, SYS_rmdir
+ ecall
+ ret
+.global unlink
+unlink:
+ li a7, SYS_unlink
+ ecall
+ ret
+.global getdents
+getdents:
+ li a7, SYS_getdents
+ ecall
+ ret
+.global stat
+stat:
+ li a7, SYS_stat
+ ecall
+ ret
+.global fstat
+fstat:
+ li a7, SYS_fstat
+ ecall
+ ret
+.global mkfifo
+mkfifo:
+ li a7, SYS_mkfifo
+ ecall
+ ret
 .global ktest
 ktest:
  li a7, SYS_ktest

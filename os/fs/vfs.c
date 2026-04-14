@@ -11,7 +11,17 @@ static allocator_t allocator_inode;
 struct superblock* rootfs;
 spinlock_t freflock;
 
+__attribute__((weak)) void fs_mount_root(void) {
+    extern void sfs_vfs_init(void);
+    sfs_vfs_init();
+}
+
 void fs_init() {
+    static int fs_inited = 0;
+    if (fs_inited)
+        return;
+    fs_inited = 1;
+
     infof("fs_init");
 
     allocator_init(&allocator_file, "file", sizeof(struct file), 1024);
@@ -21,6 +31,17 @@ void fs_init() {
     bio_init();
 
     infof("fs_init ends");
+}
+
+void fs_mount_root_once() {
+    if (rootfs == NULL)
+        fs_mount_root();
+
+    struct proc* p = curr_proc();
+    if (p != NULL && p->cwd == NULL && rootfs != NULL) {
+        iget(rootfs->root);
+        p->cwd = rootfs->root;
+    }
 }
 
 /**
@@ -111,6 +132,7 @@ struct inode* iget_locked(struct superblock* sb, uint32 ino) {
     release(&sb->lock);
 
     inode       = kalloc(&allocator_inode);
+    memset(inode, 0, sizeof(*inode));
     inode->sb   = sb;
     inode->ino  = ino;
     inode->next = NULL;
@@ -230,7 +252,7 @@ void iunlockput(struct inode *inode) {
 }
 
 int vfs_either_copy_out(void* __either dst, void* __kva src, loff_t len) {
-    if (IS_USER_VA(src)) {
+    if (IS_USER_VA(dst)) {
         int ret;
         struct proc* pr = curr_proc();
         acquire(&pr->mm->lock);

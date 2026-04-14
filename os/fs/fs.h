@@ -4,6 +4,7 @@
 #include "lock.h"
 #include "types.h"
 #include "vm.h"
+#include "fs/uapi.h"
 
 extern struct superblock *rootfs;
 
@@ -43,12 +44,6 @@ struct file_operations {
 #define FMODE_READ  0x1
 #define FMODE_WRITE 0x2
 
-#define O_RDONLY 0x001
-#define O_WRONLY 0x002
-#define O_RDWR   0x003
-#define O_CREAT  0x200
-#define O_TRUNC  0x400
-
 typedef uint32 imode_t;
 struct inode_operations;
 struct superblock;
@@ -86,11 +81,13 @@ struct inode_operations {
     int (*unlink)(struct inode *dir, struct dentry *dentry);
     int (*mkdir)(struct inode *dir, struct dentry *dentry);
     int (*rmdir)(struct inode *dir, struct dentry *dentry);
+    int (*mkfifo)(struct inode *dir, struct dentry *dentry);
 };
 
 #define IMODE_DEVICE 0x100
 #define IMODE_REG    0x200
 #define IMODE_DIR    0x400
+#define IMODE_FIFO   0x800
 
 // struct dentry is a directory entry, which is a indirection layer between vfs ans syscalls.
 // we do not use dentry as a cache, its lifetime is the same as the syscall process.
@@ -142,12 +139,9 @@ static inline struct inode *file_inode(struct file *f) {
     return f->private;
 }
 
-#define SEEK_SET 1
-#define SEEK_CUR 2
-#define SEEK_END 3
-
 // vfs.c
 void fs_init();
+void fs_mount_root_once();
 struct file *filealloc(void);
 void fget(struct file *f);
 void fput(struct file *f);
@@ -190,9 +184,11 @@ int vfs_open(struct file **out, char *name, uint32 oflags);
 int vfs_close(struct file *f);
 int vfs_read(struct file *f, void *__user buf, loff_t len);
 int vfs_write(struct file *f, void *__user buf, loff_t len);
+int vfs_getdents(struct file *f, void *__user buf, loff_t len);
 int vfs_lseek(struct file *f, loff_t offset, int whence);
 int vfs_mkdir(const char* pathname);
 int vfs_rmdir(const char* pathname);
 int vfs_unlink(const char* pathname);
+int vfs_mkfifo(const char* pathname);
 
 #endif

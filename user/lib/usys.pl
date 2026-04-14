@@ -31,5 +31,13 @@ entry("write");
 entry("pipe");
 entry("close");
 entry("gettimeofday");
+entry("open");
+entry("lseek");
+entry("mkdir");
+entry("rmdir");
+entry("unlink");
+entry("getdents");
+entry("stat");
+entry("fstat");
+entry("mkfifo");
 entry("ktest");
-
