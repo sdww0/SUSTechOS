@@ -30,11 +30,17 @@ static struct inode *dlookupx(char *path, char *name, int stop_at_parent) {
             goto err;
         if (stop_at_parent && *path == '\0')
             goto out;
+        if (strncmp(name, ".", DIRSIZ) == 0)
+            continue;
         assert(ind->iops->lookup);
 
         strncpy(dentry.name, name, DIRSIZ);
         if (ind->iops->lookup(ind, &dentry) != 0)
             goto err;
+        if (dentry.ind == ind) {
+            iput(dentry.ind);
+            continue;
+        }
 
         // we are dropping the ind ptr, so iput
         iunlockput(ind);
@@ -48,7 +54,7 @@ out:
     return ind;
 
 err:
-    iunlock(ind);
+    iunlockput(ind);
     return NULL;
 }
 

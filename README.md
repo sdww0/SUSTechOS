@@ -70,6 +70,15 @@ After booting into `sh`, run:
 ```text
 fs_score_basic
 fs_score_dir
+fs_score_path
+fs_score_names
+fs_score_errors
+fs_score_dirents
+fs_score_fd
+fs_score_flags
+fs_score_rw
+fs_score_holes
+fs_score_stress
 fs_score_index
 fs_score_index double
 fs_score_index triple
@@ -85,6 +94,15 @@ Reference success output:
 ```text
 PASS fs_score_basic
 PASS fs_score_dir
+PASS fs_score_path
+PASS fs_score_names
+PASS fs_score_errors
+PASS fs_score_dirents
+PASS fs_score_fd
+PASS fs_score_flags
+PASS fs_score_rw
+PASS fs_score_holes
+PASS fs_score_stress
 PASS fs_score_index single blocks=14
 PASS fs_score_index double blocks=1280
 PASS fs_score_index triple blocks=17920

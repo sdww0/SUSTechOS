@@ -8,10 +8,16 @@ int vfs_create(struct file** out, char* name) {
 int vfs_open(struct file** out, char* name, uint32 oflags) {
     *out              = NULL;
     struct inode* ind = NULL;
+    uint32 accmode    = oflags & O_RDWR;
+
+    if (accmode != O_RDONLY && accmode != O_WRONLY && accmode != O_RDWR)
+        return -EINVAL;
+    if ((oflags & O_TRUNC) && accmode == O_RDONLY)
+        return -EINVAL;
 
     if (oflags & O_CREAT) {
         // create a new file
-        struct dentry dentry;
+        struct dentry dentry = {.name = {0}, .ind = NULL};
 
         struct inode* diri = dlookup_parent(name, dentry.name);
         if (diri == NULL)
@@ -56,6 +62,10 @@ int vfs_open(struct file** out, char* name, uint32 oflags) {
     }
 
     if (oflags & O_TRUNC) {
+        if (!(ind->imode & IMODE_REG)) {
+            iunlockput(ind);
+            return -EINVAL;
+        }
         ind->size = 0;
         imarkdirty(ind);
     }
@@ -66,7 +76,11 @@ int vfs_open(struct file** out, char* name, uint32 oflags) {
     struct file* f = filealloc();
     f->private     = ind;
     f->ops         = ind->fops;
-    f->mode        = FMODE_READ | FMODE_WRITE;
+    f->mode        = 0;
+    if (accmode == O_RDONLY || accmode == O_RDWR)
+        f->mode |= FMODE_READ;
+    if (accmode == O_WRONLY || accmode == O_RDWR)
+        f->mode |= FMODE_WRITE;
 
     *out = f;
     return 0;
@@ -155,8 +169,7 @@ int vfs_lseek(struct file* f, loff_t offset, int whence) {
 int vfs_mkdir(const char* pathname) {
     char name[256];
     strncpy(name, pathname, sizeof(name) - 1);
-    struct dentry dentry;
-    struct inode* ind = NULL;
+    struct dentry dentry = {.name = {0}, .ind = NULL};
     int ret           = 0;
 
     struct inode* ip = dlookup_parent(name, dentry.name);
